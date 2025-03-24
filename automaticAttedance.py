@@ -1,6 +1,5 @@
-import tkinter as tk
-from tkinter import *
-import os, cv2
+import os
+import cv2
 import shutil
 import csv
 import numpy as np
@@ -8,276 +7,405 @@ from PIL import ImageTk, Image
 import pandas as pd
 import datetime
 import time
-import tkinter.ttk as tkk
-import tkinter.font as font
+import customtkinter as ctk
 
+# Set appearance and color theme to match main application
+ctk.set_appearance_mode("light")  # Options: "light", "dark", "system"
+ctk.set_default_color_theme("blue")  # Options: "blue", "dark-blue", "green"
+
+# Paths setup
 haarcasecade_path = "haarcascade_frontalface_default.xml"
-trainimagelabel_path = (
-    "TrainingImageLabel\\Trainner.yml"
-)
+trainimagelabel_path = "TrainingImageLabel/Trainner.yml"
 trainimage_path = "TrainingImage"
-studentdetail_path = (
-    "StudentDetails\\studentdetails.csv"
-)
+studentdetail_path = "StudentDetails/studentdetails.csv"
 attendance_path = "Attendance"
-# for choose subject and fill attendance
+
+# Function for choosing subject and filling attendance
 def subjectChoose(text_to_speech):
     def FillAttendance():
-        sub = tx.get()
+        sub = subject_entry.get()
         now = time.time()
         future = now + 20
-        print(now)
-        print(future)
+        
         if sub == "":
-            t = "Please enter the subject name!!!"
+            t = "Please enter the subject name!"
             text_to_speech(t)
+            # Show error notification
+            update_notification("Please enter the subject name!", "warning")
         else:
             try:
                 recognizer = cv2.face.LBPHFaceRecognizer_create()
                 try:
                     recognizer.read(trainimagelabel_path)
                 except:
-                    e = "Model not found,please train model"
-                    Notifica.configure(
-                        text=e,
-                        bg="black",
-                        fg="yellow",
-                        width=33,
-                        font=("times", 15, "bold"),
-                    )
-                    Notifica.place(x=20, y=250)
+                    e = "Model not found, please train model"
+                    update_notification(e, "error")
                     text_to_speech(e)
+                    return
+                
                 facecasCade = cv2.CascadeClassifier(haarcasecade_path)
                 df = pd.read_csv(studentdetail_path)
                 cam = cv2.VideoCapture(0)
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 col_names = ["Enrollment", "Name"]
                 attendance = pd.DataFrame(columns=col_names)
+                
+                # Progress bar setup
+                progress_label.configure(text="Capturing faces... Please wait")
+                progress_bar.set(0)
+                progress_bar.pack(pady=(5, 10), padx=20, fill="x")
+                progress_frame.pack(fill="x", padx=20, pady=10)
+                
+                # Update UI
+                subject_window.update()
+                
+                capture_complete = False
+                progress_value = 0
+                
                 while True:
-                    ___, im = cam.read()
+                    ret, im = cam.read()
+                    if not ret:
+                        update_notification("Camera not accessible", "error")
+                        break
+                        
                     gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
                     faces = facecasCade.detectMultiScale(gray, 1.2, 5)
+                    
                     for (x, y, w, h) in faces:
                         global Id
-
-                        Id, conf = recognizer.predict(gray[y : y + h, x : x + w])
+                        Id, conf = recognizer.predict(gray[y:y+h, x:x+w])
+                        
                         if conf < 70:
-                            print(conf)
-                            global Subject
-                            global aa
-                            global date
-                            global timeStamp
-                            Subject = tx.get()
+                            global Subject, aa, date, timeStamp
+                            Subject = sub
                             ts = time.time()
-                            date = datetime.datetime.fromtimestamp(ts).strftime(
-                                "%Y-%m-%d"
-                            )
-                            timeStamp = datetime.datetime.fromtimestamp(ts).strftime(
-                                "%H:%M:%S"
-                            )
+                            date = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+                            timeStamp = datetime.datetime.fromtimestamp(ts).strftime("%H:%M:%S")
                             aa = df.loc[df["Enrollment"] == Id]["Name"].values
                             global tt
-                            tt = str(Id) + "-" + aa
-                            # En='1604501160'+str(Id)
-                            attendance.loc[len(attendance)] = [
-                                Id,
-                                aa,
-                            ]
-                            cv2.rectangle(im, (x, y), (x + w, y + h), (0, 260, 0), 4)
-                            cv2.putText(
-                                im, str(tt), (x + h, y), font, 1, (255, 255, 0,), 4
-                            )
+                            tt = str(Id) + "-" + str(aa[0]) if len(aa) > 0 else str(Id)
+                            
+                            # Add to attendance dataframe
+                            attendance.loc[len(attendance)] = [Id, aa[0] if len(aa) > 0 else "Unknown"]
+                            
+                            # Draw green rectangle for recognized faces
+                            cv2.rectangle(im, (x, y), (x+w, y+h), (0, 255, 0), 4)
+                            cv2.putText(im, str(tt), (x+h, y), font, 1, (255, 255, 0), 2)
                         else:
                             Id = "Unknown"
                             tt = str(Id)
-                            cv2.rectangle(im, (x, y), (x + w, y + h), (0, 25, 255), 7)
-                            cv2.putText(
-                                im, str(tt), (x + h, y), font, 1, (0, 25, 255), 4
-                            )
+                            # Draw red rectangle for unknown faces
+                            cv2.rectangle(im, (x, y), (x+w, y+h), (0, 0, 255), 4)
+                            cv2.putText(im, str(tt), (x+h, y), font, 1, (0, 0, 255), 2)
+                    
+                    # Update progress bar
+                    progress_value = min(1.0, (time.time() - now) / (future - now))
+                    progress_bar.set(progress_value)
+                    subject_window.update_idletasks()
+                    
                     if time.time() > future:
+                        capture_complete = True
                         break
-
-                    attendance = attendance.drop_duplicates(
-                        ["Enrollment"], keep="first"
-                    )
+                    
+                    # Remove duplicates
+                    attendance = attendance.drop_duplicates(["Enrollment"], keep="first")
+                    
+                    # Show live feed
                     cv2.imshow("Filling Attendance...", im)
                     key = cv2.waitKey(30) & 0xFF
-                    if key == 27:
+                    if key == 27:  # ESC key
                         break
-
-                ts = time.time()
-                print(aa)
-                # attendance["date"] = date
-                # attendance["Attendance"] = "P"
-                attendance[date] = 1
-                date = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
-                timeStamp = datetime.datetime.fromtimestamp(ts).strftime("%H:%M:%S")
-                Hour, Minute, Second = timeStamp.split(":")
-                # fileName = "Attendance/" + Subject + ".csv"
-                path = os.path.join(attendance_path, Subject)
-                if not os.path.exists(path):
-                    os.makedirs(path)
-                fileName = (
-                    f"{path}/"
-                    + Subject
-                    + "_"
-                    + date
-                    + "_"
-                    + Hour
-                    + "-"
-                    + Minute
-                    + "-"
-                    + Second
-                    + ".csv"
-                )
-                attendance = attendance.drop_duplicates(["Enrollment"], keep="first")
-                print(attendance)
-                attendance.to_csv(fileName, index=False)
-
-                m = "Attendance Filled Successfully of " + Subject
-                Notifica.configure(
-                    text=m,
-                    bg="black",
-                    fg="yellow",
-                    width=33,
-                    relief=RIDGE,
-                    bd=5,
-                    font=("times", 15, "bold"),
-                )
-                text_to_speech(m)
-
-                Notifica.place(x=20, y=250)
-
+                
+                # Clean up camera
                 cam.release()
                 cv2.destroyAllWindows()
-
-                import csv
-                import tkinter
-
-                root = tkinter.Tk()
-                root.title("Attendance of " + Subject)
-                root.configure(background="black")
-                cs = os.path.join(path, fileName)
-                print(cs)
-                with open(cs, newline="") as file:
-                    reader = csv.reader(file)
-                    r = 0
-
-                    for col in reader:
-                        c = 0
-                        for row in col:
-
-                            label = tkinter.Label(
-                                root,
-                                width=10,
-                                height=1,
-                                fg="yellow",
-                                font=("times", 15, " bold "),
-                                bg="black",
-                                text=row,
-                                relief=tkinter.RIDGE,
-                            )
-                            label.grid(row=r, column=c)
-                            c += 1
-                        r += 1
-                root.mainloop()
-                print(attendance)
-            except:
-                f = "No Face found for attendance"
-                text_to_speech(f)
+                
+                if capture_complete:
+                    # Process the attendance data
+                    ts = time.time()
+                    date = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+                    timeStamp = datetime.datetime.fromtimestamp(ts).strftime("%H:%M:%S")
+                    Hour, Minute, Second = timeStamp.split(":")
+                    
+                    # Add attendance column
+                    attendance[date] = 1
+                    
+                    # Create directory if not exists
+                    path = os.path.join(attendance_path, Subject)
+                    if not os.path.exists(path):
+                        os.makedirs(path)
+                    
+                    # Save attendance file
+                    fileName = f"{path}/{Subject}_{date}_{Hour}-{Minute}-{Second}.csv"
+                    attendance = attendance.drop_duplicates(["Enrollment"], keep="first")
+                    attendance.to_csv(fileName, index=False)
+                    
+                    # Show success message
+                    m = f"Attendance filled successfully for {Subject}"
+                    update_notification(m, "success")
+                    text_to_speech(m)
+                    
+                    # Hide progress elements
+                    progress_frame.pack_forget()
+                    
+                    # Display attendance
+                    showAttendanceWindow(path, fileName, Subject)
+                else:
+                    update_notification("Attendance capture was interrupted", "warning")
+            
+            except Exception as e:
+                update_notification(f"Error: {str(e)}", "error")
+                text_to_speech("An error occurred while capturing attendance")
                 cv2.destroyAllWindows()
-
-    ###windo is frame for subject chooser
-    subject = Tk()
-    # windo.iconbitmap("AMS.ico")
-    subject.title("Subject...")
-    subject.geometry("580x320")
-    subject.resizable(0, 0)
-    subject.configure(background="black")
-    # subject_logo = Image.open("UI_Image/0004.png")
-    # subject_logo = subject_logo.resize((50, 47), Image.ANTIALIAS)
-    # subject_logo1 = ImageTk.PhotoImage(subject_logo)
-    titl = tk.Label(subject, bg="black", relief=RIDGE, bd=10, font=("arial", 30))
-    titl.pack(fill=X)
-    # l1 = tk.Label(subject, image=subject_logo1, bg="black",)
-    # l1.place(x=100, y=10)
-    titl = tk.Label(
-        subject,
-        text="Enter the Subject Name",
-        bg="black",
-        fg="green",
-        font=("arial", 25),
-    )
-    titl.place(x=160, y=12)
-    Notifica = tk.Label(
-        subject,
-        text="Attendance filled Successfully",
-        bg="yellow",
-        fg="black",
-        width=33,
-        height=2,
-        font=("times", 15, "bold"),
-    )
-
-    def Attf():
-        sub = tx.get()
+    
+    def update_notification(message, message_type="info"):
+        # Configure colors based on message type
+        if message_type == "error":
+            notification_label.configure(text=message, fg_color="#FFE0E0", text_color="#D32F2F")
+        elif message_type == "warning":
+            notification_label.configure(text=message, fg_color="#FFF8E1", text_color="#FF8F00")
+        elif message_type == "success":
+            notification_label.configure(text=message, fg_color="#E8F5E9", text_color="#2E7D32")
+        else:  # info
+            notification_label.configure(text=message, fg_color="#E3F2FD", text_color="#1976D2")
+        
+        notification_label.pack(pady=(10, 5), padx=20, fill="x")
+        subject_window.update_idletasks()
+    
+    def check_attendance_sheets():
+        sub = subject_entry.get()
         if sub == "":
-            t = "Please enter the subject name!!!"
-            text_to_speech(t)
+            text_to_speech("Please enter the subject name!")
+            update_notification("Please enter the subject name!", "warning")
         else:
-            os.startfile(
-                f"Attendance\\{sub}"
+            path = os.path.join(attendance_path, sub)
+            if os.path.exists(path):
+                os.startfile(path)
+            else:
+                update_notification(f"No attendance records found for {sub}", "warning")
+    
+    def showAttendanceWindow(path, filename, subject_name):
+        # Create a new window to show attendance
+        attendance_window = ctk.CTkToplevel()
+        attendance_window.title(f"Attendance for {subject_name}")
+        attendance_window.geometry("600x400")
+        attendance_window.grab_set()  # Make it modal
+        
+        # Configure grid
+        attendance_window.grid_columnconfigure(0, weight=1)
+        attendance_window.grid_rowconfigure(0, weight=0)  # Header
+        attendance_window.grid_rowconfigure(1, weight=1)  # Table content
+        
+        # Header
+        header_frame = ctk.CTkFrame(attendance_window)
+        header_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
+        
+        header_label = ctk.CTkLabel(
+            header_frame,
+            text=f"Attendance Details - {subject_name} - {datetime.datetime.now().strftime('%Y-%m-%d')}",
+            font=ctk.CTkFont(family="Arial", size=16, weight="bold")
+        )
+        header_label.pack(pady=10)
+        
+        # Create a frame for the attendance data
+        data_frame = ctk.CTkScrollableFrame(attendance_window)
+        data_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        
+        # Read the CSV file and display data
+        try:
+            df = pd.read_csv(filename)
+            
+            # Create header row
+            for col_idx, col_name in enumerate(df.columns):
+                header = ctk.CTkLabel(
+                    data_frame,
+                    text=col_name,
+                    font=ctk.CTkFont(family="Arial", size=14, weight="bold"),
+                    corner_radius=4,
+                    fg_color="#E3F2FD",
+                    text_color="#1976D2"
+                )
+                header.grid(row=0, column=col_idx, padx=5, pady=(0, 5), sticky="ew")
+            
+            # Create data rows
+            for row_idx, row in df.iterrows():
+                for col_idx, col_name in enumerate(df.columns):
+                    value = row[col_name]
+                    cell = ctk.CTkLabel(
+                        data_frame,
+                        text=str(value),
+                        font=ctk.CTkFont(family="Arial", size=12),
+                        corner_radius=4,
+                        fg_color="#F5F5F5" if row_idx % 2 == 0 else "#FFFFFF"
+                    )
+                    cell.grid(row=row_idx+1, column=col_idx, padx=5, pady=2, sticky="ew")
+        
+        except Exception as e:
+            error_label = ctk.CTkLabel(
+                data_frame,
+                text=f"Error loading attendance data: {str(e)}",
+                font=ctk.CTkFont(family="Arial", size=14),
+                text_color="#D32F2F"
             )
-
-    attf = tk.Button(
-        subject,
-        text="Check Sheets",
-        command=Attf,
-        bd=7,
-        font=("times new roman", 15),
-        bg="black",
-        fg="yellow",
-        height=2,
-        width=10,
-        relief=RIDGE,
+            error_label.pack(pady=20)
+    
+    # Create the subject window with CustomTkinter
+    subject_window = ctk.CTk()
+    subject_window.title("Select Subject")
+    subject_window.geometry("600x500")
+    subject_window.resizable(True, False)
+    
+    # Header frame
+    header_frame = ctk.CTkFrame(subject_window, corner_radius=0, height=80)
+    header_frame.pack(fill="x")
+    
+    header_label = ctk.CTkLabel(
+        header_frame,
+        text="Enter the Subject Name",
+        font=ctk.CTkFont(family="Arial", size=24, weight="bold")
     )
-    attf.place(x=360, y=170)
-
-    sub = tk.Label(
-        subject,
-        text="Enter Subject",
-        width=10,
-        height=2,
-        bg="black",
-        fg="yellow",
-        bd=5,
-        relief=RIDGE,
-        font=("times new roman", 15),
+    header_label.place(relx=0.5, rely=0.5, anchor="center")
+    
+    # Content frame
+    content_frame = ctk.CTkFrame(subject_window)
+    content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    
+    # Subject input area
+    input_frame = ctk.CTkFrame(content_frame)
+    input_frame.pack(fill="x", padx=10, pady=20)
+    
+    subject_label = ctk.CTkLabel(
+        input_frame,
+        text="Enter Subject:",
+        font=ctk.CTkFont(family="Arial", size=16)
     )
-    sub.place(x=50, y=100)
-
-    tx = tk.Entry(
-        subject,
-        width=15,
-        bd=5,
-        bg="black",
-        fg="yellow",
-        relief=RIDGE,
-        font=("times", 30, "bold"),
+    subject_label.pack(side="left", padx=(10, 0))
+    
+    subject_entry = ctk.CTkEntry(
+        input_frame,
+        font=ctk.CTkFont(family="Arial", size=16),
+        width=300,
+        height=40
     )
-    tx.place(x=190, y=100)
-
-    fill_a = tk.Button(
-        subject,
+    subject_entry.pack(side="left", padx=20)
+    
+    # Buttons frame
+    buttons_frame = ctk.CTkFrame(content_frame)
+    buttons_frame.pack(fill="x", padx=10, pady=20)
+    
+    fill_attendance_button = ctk.CTkButton(
+        buttons_frame,
         text="Fill Attendance",
         command=FillAttendance,
-        bd=7,
-        font=("times new roman", 15),
-        bg="black",
-        fg="yellow",
-        height=2,
-        width=12,
-        relief=RIDGE,
+        font=ctk.CTkFont(family="Arial", size=16),
+        width=200,
+        height=40,
+        corner_radius=8
     )
-    fill_a.place(x=195, y=170)
-    subject.mainloop()
+    fill_attendance_button.pack(side="left", padx=(50, 10))
+    
+    check_sheets_button = ctk.CTkButton(
+        buttons_frame,
+        text="Check Sheets",
+        command=check_attendance_sheets,
+        font=ctk.CTkFont(family="Arial", size=16),
+        width=200,
+        height=40,
+        corner_radius=8
+    )
+    check_sheets_button.pack(side="right", padx=(10, 50))
+    
+    # Progress frame (initially hidden)
+    progress_frame = ctk.CTkFrame(content_frame)
+    
+    progress_label = ctk.CTkLabel(
+        progress_frame,
+        text="",
+        font=ctk.CTkFont(family="Arial", size=14)
+    )
+    progress_label.pack(pady=(10, 0), padx=20, fill="x")
+    
+    progress_bar = ctk.CTkProgressBar(progress_frame)
+    progress_bar.set(0)
+    
+    # Notification label (initially hidden)
+    notification_label = ctk.CTkLabel(
+        content_frame,
+        text="",
+        font=ctk.CTkFont(family="Arial", size=14),
+        corner_radius=8,
+        height=40
+    )
+    
+    # Instructions frame
+    instructions_frame = ctk.CTkFrame(content_frame)
+    instructions_frame.pack(fill="x", padx=10, pady=(30, 10))
+    
+    instructions_label = ctk.CTkLabel(
+        instructions_frame,
+        text="Instructions:\n"
+             "1. Enter the subject name above\n"
+             "2. Click 'Fill Attendance' to start face recognition\n"
+             "3. The system will capture attendance for 20 seconds\n"
+             "4. Press ESC to stop capturing early\n"
+             "5. Use 'Check Sheets' to view previous attendance records",
+        font=ctk.CTkFont(family="Arial", size=14),
+        justify="left"
+    )
+    instructions_label.pack(pady=10, padx=10, fill="x")
+    
+    subject_window.mainloop()
+
+def showAttendanceRecord(filename, subject):
+    """Function to display attendance record - can be called from outside"""
+    window = ctk.CTk()
+    window.title(f"Attendance Record - {subject}")
+    window.geometry("800x600")
+    
+    # Create scrollable frame
+    frame = ctk.CTkScrollableFrame(window)
+    frame.pack(fill="both", expand=True, padx=20, pady=20)
+    
+    # Read CSV file
+    try:
+        with open(filename, newline="") as file:
+            reader = csv.reader(file)
+            rows = list(reader)
+            
+            # Configure grid columns based on data width
+            for col_idx in range(len(rows[0]) if rows else 0):
+                frame.grid_columnconfigure(col_idx, weight=1, uniform="column")
+            
+            # Create table
+            for row_idx, row_data in enumerate(rows):
+                for col_idx, cell_data in enumerate(row_data):
+                    # Style headers differently
+                    if row_idx == 0:
+                        cell = ctk.CTkLabel(
+                            frame,
+                            text=cell_data,
+                            font=ctk.CTkFont(family="Arial", size=14, weight="bold"),
+                            corner_radius=4,
+                            fg_color="#E3F2FD",
+                            text_color="#1976D2"
+                        )
+                    else:
+                        cell = ctk.CTkLabel(
+                            frame,
+                            text=cell_data,
+                            font=ctk.CTkFont(family="Arial", size=12),
+                            corner_radius=4,
+                            fg_color="#F5F5F5" if row_idx % 2 == 0 else "#FFFFFF"
+                        )
+                    cell.grid(row=row_idx, column=col_idx, padx=5, pady=2, sticky="ew")
+    
+    except Exception as e:
+        error_label = ctk.CTkLabel(
+            frame,
+            text=f"Error loading file: {str(e)}",
+            font=ctk.CTkFont(family="Arial", size=16),
+            text_color="#D32F2F"
+        )
+        error_label.pack(pady=50)
+    
+    window.mainloop()

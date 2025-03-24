@@ -1,21 +1,24 @@
+import os
 import pandas as pd
 from glob import glob
-import os
-import tkinter
 import csv
-import tkinter as tk
-from tkinter import *
+import customtkinter as ctk
+from PIL import Image
+
 
 def subjectchoose(text_to_speech):
     def calculate_attendance():
-        Subject = tx.get()
-        if Subject=="":
-            t='Please enter the subject name.'
+        Subject = subject_entry.get()
+        if Subject == "":
+            t = 'Please enter the subject name.'
             text_to_speech(t)
-    
-        filenames = glob(
-            f"Attendance\\{Subject}\\{Subject}*.csv"
-        )
+            return
+
+        filenames = glob(f"Attendance\\{Subject}\\{Subject}*.csv")
+        if not filenames:
+            message_label.configure(text=f"No attendance records found for {Subject}")
+            return
+            
         df = [pd.read_csv(f) for f in filenames]
         newdf = df[0]
         for i in range(1, len(df)):
@@ -23,120 +26,156 @@ def subjectchoose(text_to_speech):
         newdf.fillna(0, inplace=True)
         newdf["Attendance"] = 0
         for i in range(len(newdf)):
-            newdf["Attendance"].iloc[i] = str(int(round(newdf.iloc[i, 2:-1].mean() * 100)))+'%'
-            #newdf.sort_values(by=['Enrollment'],inplace=True)
+            newdf["Attendance"].iloc[i] = str(int(round(newdf.iloc[i, 2:-1].mean() * 100))) + '%'
+        
         newdf.to_csv(f"Attendance\\{Subject}\\attendance.csv", index=False)
-
-        root = tkinter.Tk()
-        root.title("Attendance of "+Subject)
-        root.configure(background="black")
+        
+        # Open attendance in a new window
+        attendance_window = ctk.CTkToplevel()
+        attendance_window.title(f"Attendance of {Subject}")
+        attendance_window.geometry("800x600")
+        
+        # Create a frame for the data
+        data_frame = ctk.CTkScrollableFrame(attendance_window)
+        data_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Configure grid
         cs = f"Attendance\\{Subject}\\attendance.csv"
         with open(cs) as file:
             reader = csv.reader(file)
-            r = 0
-
-            for col in reader:
-                c = 0
-                for row in col:
-
-                    label = tkinter.Label(
-                        root,
-                        width=10,
-                        height=1,
-                        fg="yellow",
-                        font=("times", 15, " bold "),
-                        bg="black",
-                        text=row,
-                        relief=tkinter.RIDGE,
+            data = list(reader)
+            
+            # Create header row with special formatting
+            for c, col_name in enumerate(data[0]):
+                header_label = ctk.CTkLabel(
+                    data_frame,
+                    text=col_name,
+                    font=ctk.CTkFont(family="Verdana", size=16, weight="bold"),
+                    width=100,
+                    height=35,
+                    corner_radius=8,
+                    fg_color="#1f538d",  # Blue header
+                )
+                header_label.grid(row=0, column=c, padx=5, pady=5, sticky="nsew")
+            
+            # Create data rows
+            for r in range(1, len(data)):
+                for c, cell_value in enumerate(data[r]):
+                    cell_label = ctk.CTkLabel(
+                        data_frame,
+                        text=cell_value,
+                        font=ctk.CTkFont(family="Verdana", size=14),
+                        width=100,
+                        height=30,
+                        corner_radius=8,
+                        fg_color=("#EAEAEA", "#2B2B2B"),  # Light/dark mode colors
                     )
-                    label.grid(row=r, column=c)
-                    c += 1
-                r += 1
-        root.mainloop()
-        print(newdf)
+                    cell_label.grid(row=r, column=c, padx=5, pady=2, sticky="nsew")
 
-    subject = Tk()
-    # windo.iconbitmap("AMS.ico")
-    subject.title("Subject...")
-    subject.geometry("580x320")
-    subject.resizable(0, 0)
-    subject.configure(background="black")
-    # subject_logo = Image.open("UI_Image/0004.png")
-    # subject_logo = subject_logo.resize((50, 47), Image.ANTIALIAS)
-    # subject_logo1 = ImageTk.PhotoImage(subject_logo)
-    titl = tk.Label(subject, bg="black", relief=RIDGE, bd=10, font=("arial", 30))
-    titl.pack(fill=X)
-    # l1 = tk.Label(subject, image=subject_logo1, bg="black",)
-    # l1.place(x=100, y=10)
-    titl = tk.Label(
-        subject,
-        text="Which Subject of Attendance?",
-        bg="black",
-        fg="green",
-        font=("arial", 25),
-    )
-    titl.place(x=100, y=12)
-
-    def Attf():
-        sub = tx.get()
+    def open_attendance_folder():
+        sub = subject_entry.get()
         if sub == "":
-            t="Please enter the subject name!!!"
+            t = "Please enter the subject name!!!"
             text_to_speech(t)
         else:
-            os.startfile(
-            f"Attendance\\{sub}"
-            )
+            folder_path = f"Attendance\\{sub}"
+            if os.path.exists(folder_path):
+                os.startfile(folder_path)
+            else:
+                message_label.configure(text=f"Folder not found: {folder_path}")
 
-
-    attf = tk.Button(
-        subject,
-        text="Check Sheets",
-        command=Attf,
-        bd=7,
-        font=("times new roman", 15),
-        bg="black",
-        fg="yellow",
-        height=2,
-        width=10,
-        relief=RIDGE,
+    # Create main window
+    subject_window = ctk.CTk()
+    subject_window.title("View Attendance")
+    subject_window.geometry("800x500")
+    subject_window.minsize(700, 450)
+    
+    # Configure responsive grid layout
+    subject_window.grid_columnconfigure(0, weight=1)
+    subject_window.grid_rowconfigure((0, 1, 2, 3, 4), weight=1)
+    
+    # Header
+    header_frame = ctk.CTkFrame(subject_window, corner_radius=0)
+    header_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 0))
+    header_frame.grid_columnconfigure(0, weight=1)
+    
+    # Title
+    title_label = ctk.CTkLabel(
+        header_frame,
+        text="View Subject Attendance",
+        font=ctk.CTkFont(family="Verdana", size=28, weight="bold")
     )
-    attf.place(x=360, y=170)
-
-    sub = tk.Label(
-        subject,
-        text="Enter Subject",
-        width=10,
-        height=2,
-        bg="black",
-        fg="yellow",
-        bd=5,
-        relief=RIDGE,
-        font=("times new roman", 15),
+    title_label.grid(row=0, column=0, padx=20, pady=20)
+    
+    # Try to load and display an image (if available)
+    try:
+        attendance_img = Image.open("UI_Image/attendance.png")
+        attendance_ctk_img = ctk.CTkImage(light_image=attendance_img, size=(80, 80))
+        img_label = ctk.CTkLabel(subject_window, image=attendance_ctk_img, text="")
+        img_label.grid(row=1, column=0, padx=20, pady=10)
+    except:
+        pass  # Skip image if not available
+    
+    # Subject entry section
+    entry_frame = ctk.CTkFrame(subject_window)
+    entry_frame.grid(row=2, column=0, padx=20, pady=20, sticky="ew")
+    entry_frame.grid_columnconfigure(0, weight=1)
+    entry_frame.grid_columnconfigure(1, weight=3)
+    
+    # Subject label
+    subject_label = ctk.CTkLabel(
+        entry_frame,
+        text="Enter Subject:",
+        font=ctk.CTkFont(family="Verdana", size=16)
     )
-    sub.place(x=50, y=100)
-
-    tx = tk.Entry(
-        subject,
-        width=15,
-        bd=5,
-        bg="black",
-        fg="yellow",
-        relief=RIDGE,
-        font=("times", 30, "bold"),
+    subject_label.grid(row=0, column=0, padx=20, pady=20, sticky="e")
+    
+    # Subject entry
+    subject_entry = ctk.CTkEntry(
+        entry_frame,
+        font=ctk.CTkFont(family="Verdana", size=18),
+        width=250,
+        height=40
     )
-    tx.place(x=190, y=100)
-
-    fill_a = tk.Button(
-        subject,
+    subject_entry.grid(row=0, column=1, padx=20, pady=20, sticky="w")
+    
+    # Message display
+    message_label = ctk.CTkLabel(
+        subject_window,
+        text="",
+        font=ctk.CTkFont(family="Verdana", size=14),
+        corner_radius=8,
+        fg_color=("#EAEAEA", "#2B2B2B"),  # Light/dark mode colors
+        height=30
+    )
+    message_label.grid(row=3, column=0, padx=20, pady=(0, 20), sticky="ew")
+    
+    # Button frame
+    button_frame = ctk.CTkFrame(subject_window)
+    button_frame.grid(row=4, column=0, padx=20, pady=20, sticky="ew")
+    button_frame.grid_columnconfigure((0, 1), weight=1)
+    
+    # View Attendance button
+    view_button = ctk.CTkButton(
+        button_frame,
         text="View Attendance",
         command=calculate_attendance,
-        bd=7,
-        font=("times new roman", 15),
-        bg="black",
-        fg="yellow",
-        height=2,
-        width=12,
-        relief=RIDGE,
+        font=ctk.CTkFont(family="Verdana", size=16),
+        height=50,
+        width=200
     )
-    fill_a.place(x=195, y=170)
-    subject.mainloop()
+    view_button.grid(row=0, column=0, padx=20, pady=20)
+    
+    # Check Sheets button
+    sheets_button = ctk.CTkButton(
+        button_frame,
+        text="Check Sheets",
+        command=open_attendance_folder,
+        font=ctk.CTkFont(family="Verdana", size=16),
+        height=50,
+        width=200
+    )
+    sheets_button.grid(row=0, column=1, padx=20, pady=20)
+    
+    # Start the main loop
+    subject_window.mainloop()
